@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: syariahpulse-postgres
+    environment:
+      POSTGRES_DB: syariahpulse
+      POSTGRES_USER: syariahpulse
+      POSTGRES_PASSWORD: syariahpulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syariahpulse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: syariahpulse-backend
+    ports:
+      - "8080:8080"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: syariahpulse
+      POSTGRES_USER: syariahpulse
+      POSTGRES_PASSWORD: syariahpulse
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

@@ -1,0 +1,118 @@
+package com.syariahpulse.integration;
+
+import com.syariahpulse.scoring.domain.StockScore;
+import com.syariahpulse.scoring.infrastructure.StockScoreRepository;
+import com.syariahpulse.stock.domain.DailyPrice;
+import com.syariahpulse.stock.domain.Stock;
+import com.syariahpulse.stock.infrastructure.DailyPriceRepository;
+import com.syariahpulse.stock.infrastructure.StockRepository;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Testcontainers(disabledWithoutDocker = true)
+class StockApiIntegrationTest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("syariahpulse")
+            .withUsername("syariahpulse")
+            .withPassword("syariahpulse");
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+    }
+
+    @Autowired MockMvc mockMvc;
+    @Autowired StockRepository stockRepository;
+    @Autowired DailyPriceRepository dailyPriceRepository;
+    @Autowired StockScoreRepository stockScoreRepository;
+
+    @Test
+    void top_picks_returns_empty_when_no_data() throws Exception {
+        mockMvc.perform(get("/api/top-picks"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("application/json"))
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void top_picks_returns_scored_stock() throws Exception {
+        LocalDate today = LocalDate.now();
+
+        Stock stock = stockRepository.save(
+                Stock.builder().symbol("DILD").companyName("Intiland Development").sector("Property").isSyariah(true).build()
+        );
+
+        dailyPriceRepository.save(
+                DailyPrice.builder().stock(stock).tradingDate(today)
+                        .open(BigDecimal.valueOf(200)).high(BigDecimal.valueOf(210))
+                        .low(BigDecimal.valueOf(195)).close(BigDecimal.valueOf(200))
+                        .volume(5_000_000L).build()
+        );
+
+        stockScoreRepository.save(
+                StockScore.builder().stock(stock).scoringDate(today)
+                        .score(85).priceScore(20).volumeScore(30)
+                        .rsiScore(20).ema20Score(15).trendScore(0)
+                        .rankPosition(1).build()
+        );
+
+        mockMvc.perform(get("/api/top-picks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].symbol").value("DILD"))
+                .andExpect(jsonPath("$[0].score").value(85));
+    }
+
+    @Test
+    void stock_detail_returns_404_for_unknown_symbol() throws Exception {
+        mockMvc.perform(get("/api/stocks/UNKNOWN"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void stock_detail_returns_reasons() throws Exception {
+        LocalDate today = LocalDate.now();
+
+        Stock stock = stockRepository.save(
+                Stock.builder().symbol("BSDE").companyName("Bumi Serpong Damai").sector("Property").isSyariah(true).build()
+        );
+
+        dailyPriceRepository.save(
+                DailyPrice.builder().stock(stock).tradingDate(today)
+                        .open(BigDecimal.valueOf(150)).high(BigDecimal.valueOf(160))
+                        .low(BigDecimal.valueOf(145)).close(BigDecimal.valueOf(155))
+                        .volume(3_000_000L).build()
+        );
+
+        stockScoreRepository.save(
+                StockScore.builder().stock(stock).scoringDate(today)
+                        .score(65).priceScore(20).volumeScore(30).rsiScore(0).ema20Score(15).trendScore(0)
+                        .rankPosition(2).build()
+        );
+
+        mockMvc.perform(get("/api/stocks/BSDE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.symbol").value("BSDE"))
+                .andExpect(jsonPath("$.score").value(65))
+                .andExpect(jsonPath("$.reasons").isArray());
+    }
+}

@@ -1,0 +1,15 @@
+target/
+*.class
+*.jar
+*.war
+
+.idea/
+*.iml
+.vscode/
+.eclipse/
+
+.env
+.env.local
+
+.claude/
+CLAUDE.md
