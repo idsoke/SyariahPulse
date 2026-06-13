@@ -5,20 +5,26 @@ import com.syariahpulse.indicator.infrastructure.TechnicalIndicatorRepository;
 import com.syariahpulse.scoring.domain.StockScore;
 import com.syariahpulse.scoring.infrastructure.StockScoreRepository;
 import com.syariahpulse.stock.domain.DailyPrice;
+import com.syariahpulse.stock.domain.Stock;
 import com.syariahpulse.stock.infrastructure.DailyPriceRepository;
+import com.syariahpulse.stock.infrastructure.StockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class StockController {
 
+    private final StockRepository stockRepository;
     private final StockScoreRepository stockScoreRepository;
     private final DailyPriceRepository dailyPriceRepository;
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
@@ -46,6 +52,31 @@ public class StockController {
                             ss.getScore(),
                             reasons
                     ));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/stocks/{symbol}/history")
+    public ResponseEntity<StockHistoryResponse> getStockHistory(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "30") int days) {
+        return stockRepository.findBySymbol(symbol)
+                .map(stock -> {
+                    Map<LocalDate, BigDecimal> pricesByDate = dailyPriceRepository
+                            .findRecentByStockId(stock.getId(), days).stream()
+                            .collect(Collectors.toMap(DailyPrice::getTradingDate, DailyPrice::getClose));
+
+                    List<StockHistoryResponse.HistoryEntry> history = stockScoreRepository
+                            .findHistoryBySymbol(symbol, days).stream()
+                            .map(ss -> new StockHistoryResponse.HistoryEntry(
+                                    ss.getScoringDate(),
+                                    pricesByDate.getOrDefault(ss.getScoringDate(), BigDecimal.ZERO).longValue(),
+                                    ss.getScore(),
+                                    ss.getRankPosition()
+                            ))
+                            .toList();
+
+                    return ResponseEntity.ok(new StockHistoryResponse(stock.getSymbol(), history));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }

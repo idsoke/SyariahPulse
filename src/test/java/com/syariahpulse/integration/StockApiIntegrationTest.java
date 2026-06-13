@@ -115,4 +115,55 @@ class StockApiIntegrationTest {
                 .andExpect(jsonPath("$.score").value(65))
                 .andExpect(jsonPath("$.reasons").isArray());
     }
+
+    @Test
+    void stock_history_returns_404_for_unknown_symbol() throws Exception {
+        mockMvc.perform(get("/api/stocks/UNKNOWN/history"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void stock_history_returns_score_and_price_series() throws Exception {
+        LocalDate today = LocalDate.now();
+        LocalDate yesterday = today.minusDays(1);
+
+        Stock stock = stockRepository.save(
+                Stock.builder().symbol("ADRO").companyName("Adaro Energy").sector("Energy").isSyariah(true).build()
+        );
+
+        dailyPriceRepository.save(
+                DailyPrice.builder().stock(stock).tradingDate(yesterday)
+                        .open(BigDecimal.valueOf(100)).high(BigDecimal.valueOf(105))
+                        .low(BigDecimal.valueOf(98)).close(BigDecimal.valueOf(102))
+                        .volume(1_000_000L).build()
+        );
+        dailyPriceRepository.save(
+                DailyPrice.builder().stock(stock).tradingDate(today)
+                        .open(BigDecimal.valueOf(102)).high(BigDecimal.valueOf(110))
+                        .low(BigDecimal.valueOf(100)).close(BigDecimal.valueOf(108))
+                        .volume(1_500_000L).build()
+        );
+
+        stockScoreRepository.save(
+                StockScore.builder().stock(stock).scoringDate(yesterday)
+                        .score(50).priceScore(20).volumeScore(0).rsiScore(20).ema20Score(10).trendScore(0).build()
+        );
+        stockScoreRepository.save(
+                StockScore.builder().stock(stock).scoringDate(today)
+                        .score(75).priceScore(20).volumeScore(30).rsiScore(10).ema20Score(15).trendScore(0)
+                        .rankPosition(3).build()
+        );
+
+        mockMvc.perform(get("/api/stocks/ADRO/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.symbol").value("ADRO"))
+                .andExpect(jsonPath("$.history.length()").value(2))
+                .andExpect(jsonPath("$.history[0].date").value(today.toString()))
+                .andExpect(jsonPath("$.history[0].score").value(75))
+                .andExpect(jsonPath("$.history[0].price").value(108))
+                .andExpect(jsonPath("$.history[0].rankPosition").value(3))
+                .andExpect(jsonPath("$.history[1].date").value(yesterday.toString()))
+                .andExpect(jsonPath("$.history[1].score").value(50))
+                .andExpect(jsonPath("$.history[1].price").value(102));
+    }
 }
