@@ -93,10 +93,15 @@ Aplikasi berjalan di `http://localhost:8080`
 
 ### GET /api/top-picks
 
-Mengembalikan Top 10 saham syariah dengan skor tertinggi hari ini.
+Mengembalikan saham syariah dengan skor tertinggi hari ini.
+
+| Query Param | Default | Keterangan |
+|---|---|---|
+| `limit` | `10` | Jumlah maksimal saham yang dikembalikan |
+| `minScore` | `0` | Skor minimum saham yang ditampilkan |
 
 ```bash
-curl http://localhost:8080/api/top-picks
+curl "http://localhost:8080/api/top-picks?limit=5&minScore=50"
 ```
 
 ```json
@@ -105,6 +110,24 @@ curl http://localhost:8080/api/top-picks
     "symbol": "DILD",
     "score": 100,
     "price": 200
+  }
+]
+```
+
+### GET /api/stocks
+
+Mengembalikan daftar semua saham syariah yang terdaftar.
+
+```bash
+curl http://localhost:8080/api/stocks
+```
+
+```json
+[
+  {
+    "symbol": "DILD",
+    "companyName": "PT Intiland Development Tbk",
+    "sector": "Properti"
   }
 ]
 ```

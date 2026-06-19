@@ -19,7 +19,7 @@ public class RankingService {
 
     @Transactional
     public void rankForDate(LocalDate date) {
-        List<StockScore> top10 = stockScoreRepository.findTop10ByScoringDate(date);
+        List<StockScore> top10 = stockScoreRepository.findByScoringDate(date, 0, 10);
         log.info("Ranking top {} stocks for {}", top10.size(), date);
 
         for (int i = 0; i < top10.size(); i++) {

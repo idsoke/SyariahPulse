@@ -32,7 +32,7 @@ class RankingServiceTest {
                 scoreWithStock("CPIN", 70)
         );
 
-        when(stockScoreRepository.findTop10ByScoringDate(date)).thenReturn(scores);
+        when(stockScoreRepository.findByScoringDate(date, 0, 10)).thenReturn(scores);
         when(stockScoreRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         rankingService.rankForDate(date);
@@ -46,7 +46,7 @@ class RankingServiceTest {
     @Test
     void empty_list_does_nothing() {
         LocalDate date = LocalDate.now();
-        when(stockScoreRepository.findTop10ByScoringDate(date)).thenReturn(List.of());
+        when(stockScoreRepository.findByScoringDate(date, 0, 10)).thenReturn(List.of());
         rankingService.rankForDate(date);
         verify(stockScoreRepository, never()).save(any());
     }

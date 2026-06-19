@@ -17,10 +17,14 @@ public interface StockScoreRepository extends JpaRepository<StockScore, Long> {
             SELECT ss FROM StockScore ss
             JOIN FETCH ss.stock s
             WHERE ss.scoringDate = :date
+            AND ss.score >= :minScore
             ORDER BY ss.score DESC
-            LIMIT 10
+            LIMIT :limit
             """)
-    List<StockScore> findTop10ByScoringDate(@Param("date") LocalDate date);
+    List<StockScore> findByScoringDate(
+            @Param("date") LocalDate date,
+            @Param("minScore") int minScore,
+            @Param("limit") int limit);
 
     @Query("""
             SELECT ss FROM StockScore ss

@@ -30,14 +30,23 @@ public class StockController {
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
 
     @GetMapping("/top-picks")
-    public List<TopPickResponse> getTopPicks() {
+    public List<TopPickResponse> getTopPicks(
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(defaultValue = "0") int minScore) {
         LocalDate today = LocalDate.now();
-        return stockScoreRepository.findTop10ByScoringDate(today).stream()
+        return stockScoreRepository.findByScoringDate(today, minScore, limit).stream()
                 .map(ss -> new TopPickResponse(
                         ss.getStock().getSymbol(),
                         ss.getScore(),
                         latestPrice(ss)
                 ))
+                .toList();
+    }
+
+    @GetMapping("/stocks")
+    public List<StockResponse> getStocks() {
+        return stockRepository.findByIsSyariahTrue().stream()
+                .map(s -> new StockResponse(s.getSymbol(), s.getCompanyName(), s.getSector()))
                 .toList();
     }
 
