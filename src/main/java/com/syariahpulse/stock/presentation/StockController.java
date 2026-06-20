@@ -1,5 +1,6 @@
 package com.syariahpulse.stock.presentation;
 
+import com.syariahpulse.indicator.application.VolumeSpikeService;
 import com.syariahpulse.indicator.domain.TechnicalIndicator;
 import com.syariahpulse.indicator.infrastructure.TechnicalIndicatorRepository;
 import com.syariahpulse.scoring.domain.StockScore;
@@ -28,13 +29,31 @@ public class StockController {
     private final StockScoreRepository stockScoreRepository;
     private final DailyPriceRepository dailyPriceRepository;
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
+    private final VolumeSpikeService volumeSpikeService;
+
+    @GetMapping("/volume-spikes")
+    public List<VolumeSpikeResponse> getVolumeSpikes(
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(defaultValue = "2.0") BigDecimal minRatio) {
+        LocalDate latestTradingDate = dailyPriceRepository.findLatestTradingDate().orElse(LocalDate.now());
+        return volumeSpikeService.findVolumeSpikes(latestTradingDate, minRatio, limit).stream()
+                .map(spike -> new VolumeSpikeResponse(
+                        spike.stock().getSymbol(),
+                        spike.stock().getCompanyName(),
+                        spike.volume(),
+                        spike.avgVolume20(),
+                        spike.volumeRatio(),
+                        spike.price().longValue()
+                ))
+                .toList();
+    }
 
     @GetMapping("/top-picks")
     public List<TopPickResponse> getTopPicks(
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(defaultValue = "0") int minScore) {
-        LocalDate today = LocalDate.now();
-        return stockScoreRepository.findByScoringDate(today, minScore, limit).stream()
+        LocalDate latestScoringDate = stockScoreRepository.findLatestScoringDate().orElse(LocalDate.now());
+        return stockScoreRepository.findByScoringDate(latestScoringDate, minScore, limit).stream()
                 .map(ss -> new TopPickResponse(
                         ss.getStock().getSymbol(),
                         ss.getScore(),

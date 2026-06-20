@@ -18,6 +18,11 @@ public interface DailyPriceRepository extends JpaRepository<DailyPrice, Long> {
 
     Optional<DailyPrice> findByStockIdAndTradingDate(Long stockId, LocalDate tradingDate);
 
+    long countByStockId(Long stockId);
+
     @Query("SELECT dp FROM DailyPrice dp WHERE dp.tradingDate = :date")
     List<DailyPrice> findAllByTradingDate(@Param("date") LocalDate date);
+
+    @Query("SELECT MAX(dp.tradingDate) FROM DailyPrice dp")
+    Optional<LocalDate> findLatestTradingDate();
 }

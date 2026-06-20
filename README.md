@@ -10,8 +10,10 @@ Platform screening saham syariah Indonesia (ISSI) yang secara otomatis mengident
 
 - **Scoring Engine** — 5 aturan teknikal dengan skor maksimal 100
 - **Top 10 Picks** — ranking otomatis saham syariah terbaik setiap hari
+- **Volume Spike Screener** — deteksi saham dengan volume hari ini jauh di atas rata-rata 20 hari
 - **Indikator Teknikal** — RSI-14, EMA-20, EMA-50, Average Volume-20 (pure Java, tanpa TA-Lib)
-- **Nightly Batch** — proses otomatis setiap 18:00 WIB Senin–Jumat
+- **Import Data Otomatis** — OHLCV harian diambil dari Yahoo Finance (`.JK`), dengan backfill histori 6 bulan saat data sebuah saham masih kosong
+- **Nightly Batch** — proses otomatis setiap 18:00 WIB Senin–Jumat (timezone `Asia/Jakarta`), bisa juga dipicu manual lewat endpoint admin
 - **REST API** — endpoint siap pakai untuk integrasi frontend atau bot
 
 ---
@@ -114,6 +116,40 @@ curl "http://localhost:8080/api/top-picks?limit=5&minScore=50"
 ]
 ```
 
+### GET /api/volume-spikes
+
+Mengembalikan saham syariah dengan volume hari ini paling tidak `minRatio` kali rata-rata volume 20 hari, diurutkan dari rasio tertinggi.
+
+| Query Param | Default | Keterangan |
+|---|---|---|
+| `limit` | `10` | Jumlah maksimal saham yang dikembalikan |
+| `minRatio` | `2.0` | Rasio minimum volume hari ini terhadap rata-rata 20 hari |
+
+```bash
+curl "http://localhost:8080/api/volume-spikes?limit=5&minRatio=3"
+```
+
+```json
+[
+  {
+    "symbol": "ANTM",
+    "companyName": "Aneka Tambang Tbk",
+    "volume": 45000000,
+    "avgVolume20": 12000000,
+    "volumeRatio": 3.75,
+    "price": 1850
+  }
+]
+```
+
+### POST /api/admin/batch/run
+
+Memicu pipeline nightly batch (import → indikator → scoring → ranking) secara manual, di luar jadwal 18:00 WIB. Berguna untuk verifikasi data tanpa menunggu jadwal. **Belum ada autentikasi** — jangan diekspos ke publik tanpa menambahkan access control.
+
+```bash
+curl -X POST http://localhost:8080/api/admin/batch/run
+```
+
 ### GET /api/stocks
 
 Mengembalikan daftar semua saham syariah yang terdaftar.
@@ -186,10 +222,17 @@ mvn clean verify
 
 ---
 
+## Sumber Data
+
+Harga harian (OHLCV) diambil dari endpoint chart Yahoo Finance untuk simbol `.JK` (`YahooFinanceClient`). Ini API publik tidak resmi — tanpa API key, tapi juga tanpa SLA/garansi ketersediaan. Daftar saham syariah saat ini adalah snapshot manual ~16 saham besar yang dikenal masuk Daftar Efek Syariah (lihat `V5__seed_syariah_stocks.sql`), bukan daftar resmi lengkap dari OJK/IDX (yang hanya tersedia dalam format PDF tanpa API/CSV terstruktur).
+
 ## Roadmap
 
-- [ ] Integrasi data harga real-time dari IDX / Yahoo Finance
-- [ ] Seed data resmi ISSI dari OJK/BEI
+- [x] Integrasi data harga harian dari Yahoo Finance (`.JK`)
+- [x] Volume Spike Screener
+- [x] Trigger batch manual (admin endpoint)
+- [ ] Seed data resmi & lengkap ISSI dari OJK/BEI (saat ini masih snapshot manual ~16 saham)
+- [ ] Autentikasi untuk endpoint admin
 - [ ] Cache Redis untuk response API
 - [ ] Notifikasi Telegram Bot setiap malam
 - [ ] Modul AI prediksi harga (XGBoost, LSTM)

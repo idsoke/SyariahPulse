@@ -43,4 +43,7 @@ public interface StockScoreRepository extends JpaRepository<StockScore, Long> {
             LIMIT :limit
             """)
     List<StockScore> findHistoryBySymbol(@Param("symbol") String symbol, @Param("limit") int limit);
+
+    @Query("SELECT MAX(ss.scoringDate) FROM StockScore ss")
+    Optional<LocalDate> findLatestScoringDate();
 }

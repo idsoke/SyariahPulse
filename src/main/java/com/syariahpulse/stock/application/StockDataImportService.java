@@ -4,45 +4,84 @@ import com.syariahpulse.stock.domain.DailyPrice;
 import com.syariahpulse.stock.domain.Stock;
 import com.syariahpulse.stock.infrastructure.DailyPriceRepository;
 import com.syariahpulse.stock.infrastructure.StockRepository;
+import com.syariahpulse.stock.infrastructure.YahooFinanceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Stub import service — replace with actual IDX/data-provider integration.
- * Inserts sample ISSI stocks so the nightly batch has data to process.
+ * Imports daily OHLCV data from Yahoo Finance (.JK tickers) for each
+ * syariah stock. Backfills history on first run so indicators (EMA50,
+ * RSI14, AvgVolume20) have enough data points, then pulls a short
+ * incremental range on later runs.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StockDataImportService {
 
+    private static final int MIN_HISTORY_DAYS = 60;
+    private static final String BACKFILL_RANGE = "6mo";
+    private static final String INCREMENTAL_RANGE = "5d";
+    private static final long REQUEST_DELAY_MS = 300;
+
     private final StockRepository stockRepository;
     private final DailyPriceRepository dailyPriceRepository;
+    private final YahooFinanceClient yahooFinanceClient;
 
-    @Transactional
     public void importDailyPrices(LocalDate date) {
-        log.info("Importing daily prices for {}", date);
-        ensureSampleStocksExist();
-        // Real implementation: call IDX API or market data provider here
+        List<Stock> stocks = stockRepository.findByIsSyariahTrue();
+        log.info("Importing daily prices for {} syariah stocks on {}", stocks.size(), date);
+
+        for (Stock stock : stocks) {
+            try {
+                importForStock(stock);
+            } catch (Exception e) {
+                log.error("Failed to import prices for {}: {}", stock.getSymbol(), e.getMessage());
+            }
+            sleepBetweenRequests();
+        }
     }
 
-    private void ensureSampleStocksExist() {
-        if (stockRepository.count() > 0) return;
+    private void sleepBetweenRequests() {
+        try {
+            Thread.sleep(REQUEST_DELAY_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
-        List<Stock> samples = List.of(
-                Stock.builder().symbol("DILD").companyName("Intiland Development Tbk").sector("Property").isSyariah(true).build(),
-                Stock.builder().symbol("BSDE").companyName("Bumi Serpong Damai Tbk").sector("Property").isSyariah(true).build(),
-                Stock.builder().symbol("CPIN").companyName("Charoen Pokphand Indonesia Tbk").sector("Food").isSyariah(true).build(),
-                Stock.builder().symbol("TLKM").companyName("Telekomunikasi Indonesia Tbk").sector("Telecom").isSyariah(true).build(),
-                Stock.builder().symbol("ANTM").companyName("Aneka Tambang Tbk").sector("Mining").isSyariah(true).build()
-        );
-        stockRepository.saveAll(samples);
-        log.info("Inserted {} sample syariah stocks", samples.size());
+    @Transactional
+    void importForStock(Stock stock) {
+        long existingCount = dailyPriceRepository.countByStockId(stock.getId());
+        String range = existingCount < MIN_HISTORY_DAYS ? BACKFILL_RANGE : INCREMENTAL_RANGE;
+
+        List<YahooFinanceClient.DailyOhlcv> history = yahooFinanceClient.fetchDailyHistory(stock.getSymbol(), range);
+        if (history.isEmpty()) {
+            log.warn("No data returned from Yahoo Finance for {}", stock.getSymbol());
+            return;
+        }
+
+        int saved = 0;
+        for (YahooFinanceClient.DailyOhlcv bar : history) {
+            if (dailyPriceRepository.findByStockIdAndTradingDate(stock.getId(), bar.tradingDate()).isPresent()) {
+                continue;
+            }
+            dailyPriceRepository.save(DailyPrice.builder()
+                    .stock(stock)
+                    .tradingDate(bar.tradingDate())
+                    .open(bar.open())
+                    .high(bar.high())
+                    .low(bar.low())
+                    .close(bar.close())
+                    .volume(bar.volume())
+                    .build());
+            saved++;
+        }
+        log.info("Imported {} new daily price record(s) for {}", saved, stock.getSymbol());
     }
 }
